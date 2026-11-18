@@ -1,0 +1,6 @@
+{
+  "name": "ZSME Assistant iOS",
+  "description": "Natywna aplikacja SwiftUI na iOS przepisana z repozytorium dniesobski/ZSME-Assistant, z darmową kompilacją w chmurze GitHub Actions i instalacją na iPhone bez Maca i bez jailbreaka.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,65 @@
+name: ZSMEAssistant
+options:
+  bundleIdPrefix: pl.zsme
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "15.4"
+  createIntermediateGroups: true
+
+packages:
+  SwiftSoup:
+    url: https://github.com/scinfu/SwiftSoup.git
+    from: "2.7.5"
+
+targets:
+  ZSMEAssistant:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: ZSMEAssistant
+    dependencies:
+      - package: SwiftSoup
+    settings:
+      base:
+        PRODUCT_NAME: ZSMEAssistant
+        PRODUCT_BUNDLE_IDENTIFIER: pl.zsme.assistant
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: "ZSME Assistant"
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "Komunikator szkolny BLE używa Bluetooth Low Energy do lokalnej komunikacji w sieci kratowej z innymi uczniami w szkole bez dostępu do internetu."
+        INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription: "Aplikacja rozgłasza węzeł komunikatora BLE w szkolnej sieci kratowej."
+        INFOPLIST_KEY_NSCalendarsUsageDescription: "Pozwala eksportować Twój plan lekcji bezpośrednio do systemowego Kalendarza Apple."
+        INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription: "Pozwala tworzyć i aktualizować wydarzenia planu lekcji w Kalendarzu Apple."
+    info:
+      path: ZSMEAssistant/Info.plist
+      properties:
+        CFBundleDisplayName: "ZSME Assistant"
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UIBackgroundModes:
+          - fetch
+          - bluetooth-central
+          - bluetooth-peripheral
+        BGTaskSchedulerPermittedIdentifiers:
+          - pl.zsme.assistant.sync
+        NSBluetoothAlwaysUsageDescription: "Komunikator szkolny BLE używa Bluetooth Low Energy do lokalnej komunikacji w sieci kratowej z innymi uczniami w szkole bez dostępu do internetu."
+        NSBluetoothPeripheralUsageDescription: "Aplikacja rozgłasza węzeł komunikatora BLE w szkolnej sieci kratowej."
+        NSCalendarsUsageDescription: "Pozwala eksportować Twój plan lekcji bezpośrednio do systemowego Kalendarza Apple."
+        NSCalendarsFullAccessUsageDescription: "Pozwala tworzyć i aktualizować wydarzenia planu lekcji w Kalendarzu Apple."
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true

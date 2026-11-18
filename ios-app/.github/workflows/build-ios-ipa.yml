@@ -1,0 +1,102 @@
+name: Budowanie iOS IPA w chmurze (bez Maca)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Pobranie kodu z repozytorium
+        uses: actions/checkout@v4
+
+      - name: Instalacja XcodeGen
+        run: brew install xcodegen
+
+      - name: Wykrycie katalogu projektu iOS i generowanie Xcodeproj
+        run: |
+          if [ -f "ios-app/project.yml" ]; then
+            cd ios-app
+          fi
+          xcodegen generate
+
+      - name: Kompilacja natywnej aplikacji iOS (bezpłatna, bez konta Apple Developer)
+        run: |
+          if [ -f "ios-app/project.yml" ]; then
+            cd ios-app
+          fi
+          xcodebuild \
+            -project ZSMEAssistant.xcodeproj \
+            -scheme ZSMEAssistant \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            ONLY_ACTIVE_ARCH=NO \
+            build
+
+      - name: Pakowanie pliku ZSMEAssistant.ipa
+        run: |
+          if [ -f "ios-app/project.yml" ]; then
+            cd ios-app
+          fi
+          APP_PATH=$(find build/Build/Products/Release-iphoneos -name "*.app" -maxdepth 1 | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Nie znaleziono pliku .app po kompilacji!"
+            exit 1
+          fi
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -r -y "$GITHUB_WORKSPACE/ZSMEAssistant.ipa" Payload
+
+      - name: Aktualizacja źródła SideStore / AltStore (altstore-source.json)
+        run: |
+          SOURCE_FILE="$GITHUB_WORKSPACE/altstore-source.json"
+          if [ -f "$GITHUB_WORKSPACE/ios-app/altstore-source.json" ]; then
+            SOURCE_FILE="$GITHUB_WORKSPACE/ios-app/altstore-source.json"
+          fi
+          IPA_SIZE=$(stat -f%z "$GITHUB_WORKSPACE/ZSMEAssistant.ipa")
+          TAG="v1.0.${{ github.run_number }}"
+          NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          REPO="${{ github.repository }}"
+          IPA_URL="https://github.com/${REPO}/releases/download/${TAG}/ZSMEAssistant.ipa"
+          sed -i '' "s|__VERSION__|1.0.${{ github.run_number }}|g" "$SOURCE_FILE"
+          sed -i '' "s|__DATE__|${NOW_ISO}|g" "$SOURCE_FILE"
+          sed -i '' "s|__SIZE__|${IPA_SIZE}|g" "$SOURCE_FILE"
+          sed -i '' "s|__DOWNLOAD_URL__|${IPA_URL}|g" "$SOURCE_FILE"
+          if [ "$SOURCE_FILE" != "$GITHUB_WORKSPACE/altstore-source.json" ]; then
+            cp "$SOURCE_FILE" "$GITHUB_WORKSPACE/altstore-source.json"
+          fi
+
+      - name: Zapisanie artefaktu IPA w zakładce Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZSMEAssistant-iOS
+          path: |
+            ZSMEAssistant.ipa
+            altstore-source.json
+
+      - name: Publikacja ZSMEAssistant.ipa w GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: iOS Build #${{ github.run_number }}
+          body: |
+            Natywna aplikacja **ZSME Assistant na iOS** skompilowana automatycznie w chmurze GitHub Actions (bez Maca).
+
+            ### Jak zainstalować na iPhone (Windows / Linux, bez Jailbreaka):
+            1. Pobierz plik `ZSMEAssistant.ipa` z załączników poniżej.
+            2. **Opcja A (Sideloadly — najprostsza na Windows/Linux)**: Podłącz iPhone'a kablem (lub Wi-Fi), przeciągnij `ZSMEAssistant.ipa` do darmowego programu [Sideloadly](https://sideloadly.io/), wpisz swój zwykły Apple ID i kliknij **Start**.
+            3. **Opcja B (SideStore — bez kabla i bez PC przy odświeżaniu)**: Wyślij `ZSMEAssistant.ipa` na iPhone'a i otwórz bezpośrednio w aplikacji **SideStore**.
+            4. Po pierwszej instalacji na iPhonie wejdź w: **Ustawienia → Ogólne → VPN i zarządzanie urządzeniem** i kliknij **Zaufaj** dla swojego Apple ID.
+          files: |
+            ZSMEAssistant.ipa
+            altstore-source.json

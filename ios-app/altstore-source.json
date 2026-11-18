@@ -1,0 +1,33 @@
+{
+  "name": "ZSME Assistant iOS",
+  "subtitle": "Oficjalne źródło SideStore / AltStore dla ZSME Assistant",
+  "description": "Natywna aplikacja SwiftUI dla uczniów i nauczycieli ZSM-E im. T. Kościuszki (plan lekcji, zastępstwa, komunikator BLE Mesh, eksport do Kalendarza Apple).",
+  "apps": [
+    {
+      "name": "ZSME Assistant",
+      "bundleIdentifier": "pl.zsme.assistant",
+      "developerName": "ZSME Assistant Community",
+      "subtitle": "Plan lekcji, zastępstwa i komunikator BLE Mesh",
+      "localizedDescription": "Natywna aplikacja iOS dla uczniów i nauczycieli ZSME. Obsługuje plan.zsme.pl, zastępstwa z sekretariat.zsme.pl/tv.php, odliczanie lekcji na żywo, eksport do Kalendarza Apple (EventKit) oraz szkolny komunikator BLE Mesh.",
+      "tintColor": "#0F4C81",
+      "category": "utilities",
+      "versions": [
+        {
+          "version": "__VERSION__",
+          "date": "__DATE__",
+          "size": __SIZE__,
+          "downloadURL": "__DOWNLOAD_URL__",
+          "minOSVersion": "16.0",
+          "localizedDescription": "Automatyczna kompilacja natywnej aplikacji SwiftUI z GitHub Actions."
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSBluetoothAlwaysUsageDescription": "Komunikator szkolny BLE używa Bluetooth Low Energy do lokalnej komunikacji w sieci kratowej.",
+          "NSCalendarsFullAccessUsageDescription": "Pozwala eksportować plan lekcji do Kalendarza Apple."
+        }
+      }
+    }
+  ]
+}
