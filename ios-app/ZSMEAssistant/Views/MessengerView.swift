@@ -12,7 +12,9 @@ struct MessengerView: View {
     private var channels: [String] {
         let clsCode = ScheduleFilterMatcher.extractPrimaryClassCode(viewModel.preferences.selectedClassName)
         let clsChannel = clsCode.isEmpty ? "#klasa" : "#\(clsCode.lowercased())"
-        return Array(NSOrderedSet(array: ["#ogólny", MeshMessage.directChannel, clsChannel, "#zastępstwa", "#pomoc"])) as? [String] ?? ["#ogólny"]
+        let base = ["#ogólny", MeshMessage.directChannel, clsChannel, "#zastępstwa", "#pomoc"]
+        let receivedChannels = mesh.messages.map(\.channel).filter { !$0.isEmpty }
+        return Array(NSOrderedSet(array: base + receivedChannels)) as? [String] ?? ["#ogólny"]
     }
 
     private var filteredMessages: [MeshMessage] {
@@ -99,9 +101,14 @@ struct MessengerView: View {
                 Text(mesh.radioState.rawValue)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(mesh.isRunning ? ZsmeTheme.liveGreen : .secondary)
-                Text("Węzły w zasięgu: \(mesh.peers.count) • Wysłano: \(mesh.stats.sentCount) • Przekazano: \(mesh.stats.relayedCount)")
+                Text("Węzły: \(mesh.peers.count) • Odb.: \(mesh.stats.receivedCount) • Wysł.: \(mesh.stats.sentCount)")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
+                if mesh.isRunning {
+                    Text("Skan: \(mesh.isScanningActive ? "OK" : "…") • Nadawanie GATT: \(mesh.isAdvertisingActive ? "OK" : "…")")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer()
             Button(mesh.isRunning ? "Zatrzymaj" : "Uruchom BLE") {
