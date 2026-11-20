@@ -189,8 +189,8 @@ enum ZsmeHtmlParser {
                 while cIdx < grid[rIdx].count && grid[rIdx][cIdx] != nil {
                     cIdx += 1
                 }
-                let rowspan = max(Int((try? cell.attr("rowspan")) ?? "1") ?? 1, 1)
-                let colspan = max(Int((try? cell.attr("colspan")) ?? "1") ?? 1, 1)
+                let rowspan = min(max(Int((try? cell.attr("rowspan")) ?? "1") ?? 1, 1), rows.count)
+                let colspan = min(max(Int((try? cell.attr("colspan")) ?? "1") ?? 1, 1), 32)
                 for dr in 0..<rowspan {
                     let trRow = rIdx + dr
                     if trRow >= rows.count { break }
@@ -459,6 +459,7 @@ enum ZsmeHtmlParser {
                     }
                 }
 
+                guard startRow < rows.count else { continue }
                 for rIdx in startRow..<rows.count {
                     let row = rows[rIdx]
                     let ths = row.children().array().filter { $0.tagName().lowercased() == "th" }

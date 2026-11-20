@@ -574,7 +574,11 @@ enum ScheduleFilterMatcher {
                 }
                 var updated = item
                 if effectiveCancel { updated.isCancellation = true }
-                if resolvedByIndex[idx] == nil || (!resolvedByIndex[idx]!.isCancellation && updated.isCancellation) {
+                if let existing = resolvedByIndex[idx] {
+                    if !existing.isCancellation && updated.isCancellation {
+                        resolvedByIndex[idx] = updated
+                    }
+                } else {
                     resolvedByIndex[idx] = updated
                 }
             }

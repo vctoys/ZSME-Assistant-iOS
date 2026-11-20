@@ -82,15 +82,15 @@ git push -u origin main`;
           <div className="text-xs font-mono tabular-nums text-slate-500">03. Automatyczny build</div>
           <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">XcodeGen + xcodebuild</h3>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Po poleceniu <code className="text-xs">git push</code> runner <code className="text-xs">macos-latest</code> generuje projekt Xcode, pobiera SwiftSoup i pakuje <code className="text-xs">Payload/ZSMEAssistant.app</code> do <code className="text-xs">.ipa</code>.
+            Po poleceniu <code className="text-xs">git push</code> runner <code className="text-xs">macos-latest</code> generuje projekt Xcode, pobiera SwiftSoup i pakuje <code className="text-xs">Payload/ZSMEAssistant.app</code> do <code className="text-xs">.ipa</code> (a workflow <code className="text-xs">deploy-testflight.yml</code> podpisuje i wysyła do TestFlight).
           </p>
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-2">
           <div className="text-xs font-mono tabular-nums text-slate-500">04. Gotowe wydanie</div>
-          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Pobierz ZSMEAssistant.ipa</h3>
+          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Pobierz .ipa lub TestFlight</h3>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Po ok. 2 minutach gotowy plik <code className="text-xs">ZSMEAssistant.ipa</code> oraz <code className="text-xs">altstore-source.json</code> pojawiają się w zakładce Releases.
+            Po ok. 2 minutach gotowy plik <code className="text-xs">ZSMEAssistant.ipa</code> pojawia się w GitHub Releases, a po konfiguracji sekretów także bezpośrednio w aplikacji Apple TestFlight.
           </p>
         </div>
       </div>

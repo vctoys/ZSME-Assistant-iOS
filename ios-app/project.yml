@@ -61,5 +61,6 @@ targets:
         NSBluetoothPeripheralUsageDescription: "Aplikacja rozgłasza węzeł komunikatora BLE w szkolnej sieci kratowej."
         NSCalendarsUsageDescription: "Pozwala eksportować Twój plan lekcji bezpośrednio do systemowego Kalendarza Apple."
         NSCalendarsFullAccessUsageDescription: "Pozwala tworzyć i aktualizować wydarzenia planu lekcji w Kalendarzu Apple."
+        ITSAppUsesNonExemptEncryption: false
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true

@@ -154,6 +154,15 @@ struct SettingsView: View {
                         }
                     }
                 }
+
+                Section("Diagnostyka i pamięć podręczna") {
+                    Button("Wyczyść pamięć podręczną i pobierz ponownie") {
+                        viewModel.clearCachedSchedules()
+                    }
+                    Button("Zresetuj wybraną klasę i dane", role: .destructive) {
+                        viewModel.resetSelectedClassAndCache()
+                    }
+                }
             }
             .navigationTitle("Ustawienia")
             .onAppear {

@@ -4,15 +4,40 @@ enum ZsmePortalError: LocalizedError {
     case invalidUrl(String)
     case httpError(Int)
     case decodingError
+    case networkError(String)
     case message(String)
 
     var errorDescription: String? {
         switch self {
         case .invalidUrl(let u): return "Nieprawidłowy adres URL: \(u)"
-        case .httpError(let code): return "Serwer zwrócił błąd HTTP \(code)"
-        case .decodingError: return "Nie udało się odczytać odpowiedzi serwera"
+        case .httpError(let code): return "Serwer szkoły zwrócił błąd HTTP \(code)."
+        case .decodingError: return "Nie udało się odczytać odpowiedzi serwera."
+        case .networkError(let msg): return msg
         case .message(let msg): return msg
         }
+    }
+
+    static func describe(_ error: Error) -> String {
+        if let portalErr = error as? ZsmePortalError {
+            return portalErr.errorDescription ?? "Wystąpił błąd połączenia z portalem."
+        }
+        if let urlErr = error as? URLError {
+            switch urlErr.code {
+            case .notConnectedToInternet, .networkConnectionLost:
+                return "Brak połączenia z internetem. Wyświetlam zapisane dane z pamięci."
+            case .timedOut:
+                return "Przekroczono czas oczekiwania na odpowiedź serwera szkoły."
+            case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed:
+                return "Nie można połączyć się z serwerem plan.zsme.pl / sekretariat.zsme.pl."
+            case .secureConnectionFailed, .serverCertificateUntrusted:
+                return "Błąd certyfikatu HTTPS podczas łączenia z portalem."
+            case .cancelled:
+                return "Żądanie zostało anulowane."
+            default:
+                return "Błąd sieci (\(urlErr.errorCode)): \(urlErr.localizedDescription)"
+            }
+        }
+        return error.localizedDescription
     }
 }
 

@@ -24,6 +24,9 @@ final class ZsmeViewModel: ObservableObject {
     @Published var isRefreshingTimetable = false
     @Published var isRefreshingSubstitutions = false
     @Published var errorMessage: String?
+    @Published var timetableError: String?
+    @Published var substitutionsError: String?
+    @Published var catalogError: String?
     @Published var statusBanner: String?
 
     let portalClient = ZsmePortalClient()
@@ -95,6 +98,7 @@ final class ZsmeViewModel: ObservableObject {
     }
 
     func refreshAll(silent: Bool = false) async {
+        if !silent { errorMessage = nil }
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.refreshCatalog(silent: silent) }
             group.addTask { await self.refreshSubstitutions(silent: silent) }
@@ -108,9 +112,13 @@ final class ZsmeViewModel: ObservableObject {
         do {
             let fetched = try await portalClient.fetchTimetableCatalog(baseUrl: preferences.planUrl)
             catalog = fetched
+            catalogError = nil
             saveCachedJSON(fetched, fileName: "catalog.json")
         } catch {
-            if !silent { errorMessage = error.localizedDescription }
+            if let urlErr = error as? URLError, urlErr.code == .cancelled { return }
+            let msg = ZsmePortalError.describe(error)
+            catalogError = msg
+            if !silent { errorMessage = msg }
         }
     }
 
@@ -120,9 +128,13 @@ final class ZsmeViewModel: ObservableObject {
         do {
             if preferences.userRole == .teacher {
                 let schools = preferences.allTeacherSchools()
-                guard let primary = schools.first else { return }
+                guard let primary = schools.first else {
+                    timetableError = nil
+                    return
+                }
                 let loaded = try await portalClient.fetchTeacherTimetable(school: primary, knownCatalog: catalog)
                 timetable = loaded
+                timetableError = nil
                 saveCachedJSON(loaded, fileName: "timetable.json")
             } else if !preferences.selectedClassUrl.isEmpty {
                 let target = TimetableTarget(
@@ -133,10 +145,14 @@ final class ZsmeViewModel: ObservableObject {
                 )
                 let loaded = try await portalClient.fetchTargetTimetable(target: target)
                 timetable = loaded
+                timetableError = nil
                 saveCachedJSON(loaded, fileName: "timetable.json")
             }
         } catch {
-            if !silent { errorMessage = error.localizedDescription }
+            if let urlErr = error as? URLError, urlErr.code == .cancelled { return }
+            let msg = ZsmePortalError.describe(error)
+            timetableError = msg
+            if !silent { errorMessage = msg }
         }
     }
 
@@ -155,12 +171,17 @@ final class ZsmeViewModel: ObservableObject {
                 )
                 let loaded = try await portalClient.fetchTeacherTimetable(school: school, knownCatalog: catalog)
                 inspectedTimetable = loaded
+                timetableError = nil
             } else {
                 let loaded = try await portalClient.fetchTargetTimetable(target: target)
                 inspectedTimetable = loaded
+                timetableError = nil
             }
         } catch {
-            errorMessage = error.localizedDescription
+            if let urlErr = error as? URLError, urlErr.code == .cancelled { return }
+            let msg = ZsmePortalError.describe(error)
+            timetableError = msg
+            errorMessage = msg
         }
     }
 
@@ -192,6 +213,7 @@ final class ZsmeViewModel: ObservableObject {
             )
             let previousHash = preferences.lastNotifiedSubstitutionsHash
             substitutions = snap
+            substitutionsError = nil
             saveCachedJSON(snap, fileName: "substitutions.json")
 
             if !snap.rawHash.isEmpty && snap.rawHash != previousHash {
@@ -207,7 +229,10 @@ final class ZsmeViewModel: ObservableObject {
                 savePreferences()
             }
         } catch {
-            if !silent { errorMessage = error.localizedDescription }
+            if let urlErr = error as? URLError, urlErr.code == .cancelled { return }
+            let msg = ZsmePortalError.describe(error)
+            substitutionsError = msg
+            if !silent { errorMessage = msg }
         }
     }
 
@@ -254,15 +279,45 @@ final class ZsmeViewModel: ObservableObject {
         }
     }
 
+    func clearCachedSchedules() {
+        let dir = cacheDirectory()
+        for name in ["catalog.json", "timetable.json", "substitutions.json"] {
+            try? FileManager.default.removeItem(at: dir.appendingPathComponent(name))
+        }
+        timetable = nil
+        inspectedTimetable = nil
+        substitutions = nil
+        timetableError = nil
+        substitutionsError = nil
+        catalogError = nil
+        errorMessage = nil
+        statusBanner = "Wyczyszczono pamięć podręczną."
+        Task { await refreshAll(silent: false) }
+    }
+
+    func resetSelectedClassAndCache() {
+        preferences.selectedClassId = ""
+        preferences.selectedClassName = ""
+        preferences.selectedClassUrl = ""
+        savePreferences()
+        clearCachedSchedules()
+    }
+
     private func loadPreferences() {
-        if let data = UserDefaults.standard.data(forKey: prefsKey),
-           let decoded = try? JSONDecoder().decode(UserPreferences.self, from: data) {
+        guard let data = UserDefaults.standard.data(forKey: prefsKey) else { return }
+        do {
+            var decoded = try JSONDecoder().decode(UserPreferences.self, from: data)
+            decoded.checkIntervalMinutes = max(15, min(120, decoded.checkIntervalMinutes))
             preferences = decoded
+        } catch {
+            UserDefaults.standard.removeObject(forKey: prefsKey)
+            preferences = UserPreferences()
         }
     }
 
     private func cacheDirectory() -> URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
         let dir = base.appendingPathComponent("ZSMECache", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
@@ -271,21 +326,31 @@ final class ZsmeViewModel: ObservableObject {
     private func saveCachedJSON<T: Encodable>(_ value: T, fileName: String) {
         let url = cacheDirectory().appendingPathComponent(fileName)
         if let data = try? JSONEncoder().encode(value) {
-            try? data.write(to: url)
+            try? data.write(to: url, options: .atomic)
+        }
+    }
+
+    private func loadCachedJSON<T: Decodable>(_ type: T.Type, fileName: String) -> T? {
+        let url = cacheDirectory().appendingPathComponent(fileName)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        do {
+            let data = try Data(contentsOf: url)
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            return nil
         }
     }
 
     private func loadCachedData() {
-        if let data = try? Data(contentsOf: cacheDirectory().appendingPathComponent("catalog.json")),
-           let decoded = try? JSONDecoder().decode(TimetableCatalog.self, from: data) {
+        if let decoded = loadCachedJSON(TimetableCatalog.self, fileName: "catalog.json") {
             catalog = decoded
         }
-        if let data = try? Data(contentsOf: cacheDirectory().appendingPathComponent("timetable.json")),
-           let decoded = try? JSONDecoder().decode(ClassTimetable.self, from: data) {
+        if var decoded = loadCachedJSON(ClassTimetable.self, fileName: "timetable.json") {
+            decoded.days = decoded.days.filter { (0...4).contains($0.dayIndex) }
             timetable = decoded
         }
-        if let data = try? Data(contentsOf: cacheDirectory().appendingPathComponent("substitutions.json")),
-           let decoded = try? JSONDecoder().decode(SubstitutionsSnapshot.self, from: data) {
+        if let decoded = loadCachedJSON(SubstitutionsSnapshot.self, fileName: "substitutions.json") {
             substitutions = decoded
         }
     }

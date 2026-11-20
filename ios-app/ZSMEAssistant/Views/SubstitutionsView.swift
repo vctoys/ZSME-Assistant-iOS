@@ -25,6 +25,26 @@ struct SubstitutionsView: View {
                     .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                 }
 
+                if let subErr = viewModel.substitutionsError {
+                    Section {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label(subErr, systemImage: "wifi.exclamationmark")
+                                .font(.caption)
+                                .foregroundStyle(ZsmeTheme.crimson)
+                            Button("Spróbuj ponownie") {
+                                Task { await viewModel.refreshSubstitutions(silent: false) }
+                            }
+                            .font(.caption.weight(.semibold))
+                        }
+                    }
+                } else if viewModel.substitutions?.authSucceeded == false {
+                    Section {
+                        Label("Nie udało się odczytać zastępstw — sprawdź klucz sekretariatu w Ustawieniach.", systemImage: "key.slash")
+                            .font(.caption)
+                            .foregroundStyle(ZsmeTheme.amber)
+                    }
+                }
+
                 if let heading = viewModel.substitutions?.dateHeading, !heading.isEmpty {
                     Section {
                         HStack {

@@ -128,7 +128,7 @@ enum LiveScheduleTracker {
 
         let weekday = gregorianCalendar.component(.weekday, from: now)
         let todayDayIndex = ScheduleFilterMatcher.weekdayToZeroBasedIndex(weekday)
-        let todayDayName = todayDayIndex.map { dayNames[$0] }
+        let todayDayName = todayDayIndex.flatMap { dayNames.indices.contains($0) ? dayNames[$0] : nil }
 
         func buildSlotsForDay(_ dayIdx: Int, applySubs: Bool) -> (slots: [LiveLessonSlot], cancelledCount: Int, banner: String?) {
             let rawLessons = timetable.days.first(where: { $0.dayIndex == dayIdx })?.lessons ?? []
@@ -218,8 +218,8 @@ enum LiveScheduleTracker {
                     return lhs.key.startSec < rhs.key.startSec
                 }
                 return (lhs.value.first?.lesson.period ?? 0) < (rhs.value.first?.lesson.period ?? 0)
-            }.map { (key, items) -> LiveLessonSlot in
-                let first = items.first!.lesson
+            }.compactMap { (key, items) -> LiveLessonSlot? in
+                guard let first = items.first?.lesson else { return nil }
                 let sh = key.startSec / 3600
                 let sm = (key.startSec % 3600) / 60
                 let eh = key.endSec / 3600
@@ -240,17 +240,23 @@ enum LiveScheduleTracker {
 
         func findNextSchoolDayFirstSlot(fromDayIndex: Int?) -> (String?, LiveLessonSlot?) {
             let ordered: [Int]
-            if let from = fromDayIndex {
-                ordered = Array(((from + 1)...4)) + Array(0...from)
+            if let from = fromDayIndex, (0...4).contains(from) {
+                let tail = from < 4 ? Array((from + 1)...4) : []
+                ordered = tail + Array(0...from)
             } else {
                 ordered = Array(0...4)
             }
-            for dIdx in ordered {
+            for dIdx in ordered where dayNames.indices.contains(dIdx) {
                 let built = buildSlotsForDay(dIdx, applySubs: false)
                 if let first = built.slots.first {
-                    let label = (fromDayIndex != nil && dIdx == fromDayIndex! + 1)
-                        ? "Jutro (\(dayNames[dIdx]))"
-                        : dayNames[dIdx]
+                    let label: String
+                    if let from = fromDayIndex, dIdx == from + 1 {
+                        label = "Jutro (\(dayNames[dIdx]))"
+                    } else if fromDayIndex == 4 && dIdx == 0 {
+                        label = "Poniedziałek"
+                    } else {
+                        label = dayNames[dIdx]
+                    }
                     return (label, first)
                 }
             }

@@ -51,6 +51,13 @@ struct TimetableView: View {
         )
     }
 
+    private var navigationTitleText: String {
+        if let name = displayedTimetable?.className, !name.isEmpty {
+            return ScheduleFilterMatcher.extractPrimaryClassCode(name)
+        }
+        return "Plan lekcji"
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -67,6 +74,20 @@ struct TimetableView: View {
                         }
                     }
 
+                    if let err = viewModel.timetableError {
+                        Section {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label(err, systemImage: "exclamationmark.triangle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(ZsmeTheme.crimson)
+                                Button("Odśwież plan") {
+                                    Task { await viewModel.refreshPrimaryTimetable(silent: false) }
+                                }
+                                .font(.caption.weight(.semibold))
+                            }
+                        }
+                    }
+
                     if viewModel.isRefreshingTimetable && dayLessons.isEmpty {
                         HStack(spacing: 10) {
                             ProgressView()
@@ -74,10 +95,13 @@ struct TimetableView: View {
                                 .foregroundStyle(.secondary)
                         }
                     } else if dayLessons.isEmpty {
+                        let safeDayName = fullDayLabels.indices.contains(viewModel.selectedDayIndex)
+                            ? fullDayLabels[viewModel.selectedDayIndex]
+                            : "wybranym dniu"
                         VStack(spacing: 10) {
                             Text(displayedTimetable == nil
                                  ? "Wybierz klasę, nauczyciela lub salę, aby wyświetlić plan."
-                                 : "Brak lekcji w dniu \(fullDayLabels[viewModel.selectedDayIndex]).")
+                                 : "Brak lekcji w dniu \(safeDayName).")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
@@ -98,7 +122,7 @@ struct TimetableView: View {
                 }
                 .listStyle(.insetGrouped)
             }
-            .navigationTitle(displayedTimetable?.className.isEmpty == false ? ScheduleFilterMatcher.extractPrimaryClassCode(displayedTimetable!.className) : "Plan lekcji")
+            .navigationTitle(navigationTitleText)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {

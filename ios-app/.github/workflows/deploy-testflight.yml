@@ -1,0 +1,222 @@
+name: Publikacja na TestFlight (App Store Connect)
+
+on:
+  workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: 'Wersja aplikacji (CFBundleShortVersionString, np. 1.0.0)'
+        required: true
+        default: '1.0.0'
+        type: string
+      bundle_id:
+        description: 'Opcjonalny Bundle ID (puste = odczytany automatycznie z .mobileprovision)'
+        required: false
+        default: ''
+        type: string
+      upload_to_testflight:
+        description: 'Wyślij zbudowane IPA automatycznie do TestFlight'
+        required: true
+        default: true
+        type: boolean
+  push:
+    tags:
+      - 'testflight-*'
+
+jobs:
+  testflight:
+    name: Podpisanie i wysyłka do TestFlight
+    runs-on: macos-latest
+
+    steps:
+      - name: Pobranie kodu z repozytorium
+        uses: actions/checkout@v4
+
+      - name: Weryfikacja wymaganych sekretów GitHub (TestFlight)
+        env:
+          IOS_DIST_CERT_BASE64: ${{ secrets.IOS_DIST_CERT_BASE64 }}
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+        run: |
+          MISSING=""
+          for var in IOS_DIST_CERT_BASE64 IOS_DIST_CERT_PASSWORD IOS_PROVISIONING_PROFILE_BASE64 ASC_API_KEY_ID ASC_API_ISSUER_ID ASC_API_KEY_P8_BASE64; do
+            eval val=\$$var
+            if [ -z "$val" ]; then
+              MISSING="$MISSING $var"
+            fi
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::Brak wymaganych sekretów w Settings -> Secrets and variables -> Actions:$MISSING"
+            echo "Zobacz instrukcję konfiguracji TestFlight w pliku README_IOS.md lub w zakładce 'Instalacja iPhone -> TestFlight'."
+            exit 1
+          fi
+
+      - name: Dekodowanie certyfikatu (.p12), profilu (.mobileprovision) i klucza API (.p8)
+        env:
+          IOS_DIST_CERT_BASE64: ${{ secrets.IOS_DIST_CERT_BASE64 }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+          INPUT_BUNDLE_ID: ${{ inputs.bundle_id }}
+        run: |
+          printf '%s' "$IOS_DIST_CERT_BASE64" | tr -d '\r\n ' | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | tr -d '\r\n ' | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s' "$ASC_API_KEY_P8_BASE64" | tr -d '\r\n ' | base64 --decode > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_API_KEY_ID}.p8"
+
+          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$RUNNER_TEMP/profile.plist")
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" "$RUNNER_TEMP/profile.plist")
+          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" "$RUNNER_TEMP/profile.plist")
+          APP_ID_FULL=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" "$RUNNER_TEMP/profile.plist")
+          DETECTED_BUNDLE_ID="${APP_ID_FULL#${TEAM_ID}.}"
+
+          BUNDLE_ID="$INPUT_BUNDLE_ID"
+          if [ -z "$BUNDLE_ID" ]; then
+            if [ "$DETECTED_BUNDLE_ID" = "*" ]; then
+              BUNDLE_ID="pl.zsme.assistant"
+            else
+              BUNDLE_ID="$DETECTED_BUNDLE_ID"
+            fi
+          fi
+
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+          cp "$RUNNER_TEMP/profile.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.mobileprovision"
+          cp "$RUNNER_TEMP/profile.mobileprovision" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/${PROFILE_UUID}.mobileprovision"
+
+          echo "PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
+          echo "PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
+          echo "TEAM_ID=$TEAM_ID" >> "$GITHUB_ENV"
+          echo "BUNDLE_ID=$BUNDLE_ID" >> "$GITHUB_ENV"
+          echo "Wykryto Team ID: $TEAM_ID, Bundle ID: $BUNDLE_ID, Profile: $PROFILE_NAME ($PROFILE_UUID)"
+
+      - name: Konfiguracja tymczasowego pęku kluczy (Keychain)
+        env:
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASS="zsme-ci-$(date +%s)"
+          security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/dist.p12" -P "$IOS_DIST_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Instalacja XcodeGen i przygotowanie konfiguracji podpisu w project.yml
+        env:
+          MARKETING_VER: ${{ inputs.marketing_version || '1.0.0' }}
+          BUILD_NUM: ${{ github.run_number }}
+        run: |
+          brew install xcodegen
+          if [ -f "ios-app/project.yml" ]; then
+            cd ios-app
+          fi
+          python3 - << 'PY'
+          import os, re
+          with open("project.yml", "r", encoding="utf-8") as f:
+              txt = f.read()
+
+          bundle_id = os.environ["BUNDLE_ID"]
+          team_id = os.environ["TEAM_ID"]
+          profile_name = os.environ["PROFILE_NAME"].replace('"', '\\"')
+          marketing_ver = os.environ["MARKETING_VER"]
+          build_num = os.environ["BUILD_NUM"]
+
+          replacements = [
+              (r'PRODUCT_BUNDLE_IDENTIFIER:.*', f'PRODUCT_BUNDLE_IDENTIFIER: "{bundle_id}"'),
+              (r'MARKETING_VERSION:.*', f'MARKETING_VERSION: "{marketing_ver}"'),
+              (r'CURRENT_PROJECT_VERSION:.*', f'CURRENT_PROJECT_VERSION: "{build_num}"'),
+              (r'CODE_SIGNING_ALLOWED:.*', 'CODE_SIGNING_ALLOWED: YES'),
+              (r'CODE_SIGNING_REQUIRED:.*', 'CODE_SIGNING_REQUIRED: YES'),
+              (r'CODE_SIGN_IDENTITY:.*', f'CODE_SIGN_IDENTITY: "Apple Distribution"\n        CODE_SIGN_STYLE: Manual\n        DEVELOPMENT_TEAM: "{team_id}"\n        PROVISIONING_PROFILE_SPECIFIER: "{profile_name}"'),
+              (r'CFBundleShortVersionString:.*', f'CFBundleShortVersionString: "{marketing_ver}"'),
+              (r'CFBundleVersion:.*', f'CFBundleVersion: "{build_num}"'),
+          ]
+          for pattern, repl in replacements:
+              txt = re.sub(pattern, repl, txt)
+
+          with open("project.yml", "w", encoding="utf-8") as f:
+              f.write(txt)
+          PY
+          xcodegen generate
+
+      - name: Archiwizacja i eksport podpisanego pliku .ipa (App Store Connect)
+        run: |
+          if [ -f "ios-app/project.yml" ]; then
+            cd ios-app
+          fi
+          xcodebuild archive \
+            -project ZSMEAssistant.xcodeproj \
+            -scheme ZSMEAssistant \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath "$RUNNER_TEMP/ZSMEAssistant.xcarchive"
+
+          cat > "$RUNNER_TEMP/ExportOptions.plist" << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>teamID</key>
+            <string>${TEAM_ID}</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>${BUNDLE_ID}</key>
+              <string>${PROFILE_UUID}</string>
+            </dict>
+            <key>uploadSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+
+          mkdir -p "$RUNNER_TEMP/export"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/ZSMEAssistant.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
+
+          IPA_FILE=$(find "$RUNNER_TEMP/export" -name "*.ipa" | head -n 1)
+          if [ -z "$IPA_FILE" ]; then
+            echo "Nie znaleziono wyeksportowanego pliku .ipa!"
+            exit 1
+          fi
+          cp "$IPA_FILE" "$GITHUB_WORKSPACE/ZSMEAssistant-TestFlight.ipa"
+          echo "IPA_FILE=$GITHUB_WORKSPACE/ZSMEAssistant-TestFlight.ipa" >> "$GITHUB_ENV"
+
+      - name: Wysłanie buildu do TestFlight (xcrun altool)
+        if: ${{ inputs.upload_to_testflight != false }}
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: |
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$IPA_FILE" \
+            --apiKey "$ASC_API_KEY_ID" \
+            --apiIssuer "$ASC_API_ISSUER_ID"
+
+      - name: Zapisanie podpisanego IPA jako artefakt
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZSMEAssistant-TestFlight-IPA
+          path: ZSMEAssistant-TestFlight.ipa
+
+      - name: Czyszczenie tymczasowych kluczy i pęku kluczy
+        if: always()
+        run: |
+          if [ -n "$KEYCHAIN_PATH" ] && [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
+          rm -rf "$HOME/.appstoreconnect/private_keys" || true
+          rm -f "$RUNNER_TEMP/dist.p12" "$RUNNER_TEMP/profile.mobileprovision" "$RUNNER_TEMP/profile.plist" || true

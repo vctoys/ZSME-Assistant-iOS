@@ -33,15 +33,34 @@ struct ClassPickerSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                if viewModel.isRefreshingCatalog && viewModel.catalog.classes.isEmpty {
+                if let catErr = viewModel.catalogError, viewModel.catalog.classes.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(catErr, systemImage: "wifi.exclamationmark")
+                            .font(.subheadline)
+                            .foregroundStyle(ZsmeTheme.crimson)
+                        Button("Spróbuj ponownie") {
+                            Task { await viewModel.refreshCatalog(silent: false) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(ZsmeTheme.cobalt)
+                        .controlSize(.small)
+                    }
+                    .padding(.vertical, 6)
+                } else if viewModel.isRefreshingCatalog && viewModel.catalog.classes.isEmpty {
                     HStack(spacing: 12) {
                         ProgressView()
                         Text("Pobieranie listy klas z plan.zsme.pl...")
                             .foregroundStyle(.secondary)
                     }
                 } else if filteredClasses.isEmpty {
-                    Text("Brak pasujących klas. Odśwież katalog lub sprawdź połączenie.")
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Brak pasujących klas. Odśwież katalog lub sprawdź połączenie.")
+                            .foregroundStyle(.secondary)
+                        Button("Odśwież katalog") {
+                            Task { await viewModel.refreshCatalog(silent: false) }
+                        }
+                        .font(.subheadline.weight(.semibold))
+                    }
                 } else {
                     ForEach(filteredClasses) { cls in
                         Button {

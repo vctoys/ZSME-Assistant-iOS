@@ -17,6 +17,9 @@ struct HomeView: View {
                     } else if viewModel.preferences.userRole == .teacher && viewModel.preferences.teacherAbbreviation.isEmpty {
                         teacherOnboardingCard
                     } else {
+                        if let errorText = viewModel.timetableError ?? viewModel.substitutionsError {
+                            errorBannerView(errorText)
+                        }
                         LiveStatusCardView(prepared: viewModel.preparedSchedule)
                         if let banner = viewModel.preparedSchedule.substitutionBanner {
                             substitutionBannerView(banner)
@@ -132,6 +135,34 @@ struct HomeView: View {
         .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
+    private func errorBannerView(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "wifi.exclamationmark")
+                    .foregroundStyle(ZsmeTheme.crimson)
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                Spacer()
+            }
+            HStack(spacing: 10) {
+                Button("Ponów") {
+                    Task { await viewModel.refreshAll(silent: false) }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(ZsmeTheme.crimson)
+                .controlSize(.mini)
+
+                Button("Zmień klasę", action: onOpenClassPicker)
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+            }
+        }
+        .padding(12)
+        .background(ZsmeTheme.crimson.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
     private func substitutionBannerView(_ banner: String) -> some View {
         Button(action: onOpenSubstitutions) {
             HStack(spacing: 10) {
@@ -174,7 +205,7 @@ struct HomeView: View {
             } else {
                 ForEach(prepared.todaySlots) { slot in
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(slot.items) { item in
+                        ForEach(Array(slot.items.enumerated()), id: \.offset) { _, item in
                             HStack(alignment: .top, spacing: 12) {
                                 VStack {
                                     Text("\(slot.period)")
@@ -264,12 +295,14 @@ private struct LiveStatusCardView: View {
                     .font(.system(size: 40, weight: .bold, design: .rounded).monospacedDigit())
                 ProgressView(value: progress)
                     .tint(ZsmeTheme.liveGreen)
-                ForEach(current.items) { item in
+                ForEach(Array(current.items.enumerated()), id: \.offset) { _, item in
                     HStack {
-                        Text(item.substitution?.subject.isEmpty == false ? item.substitution!.subject : item.lesson.subject)
+                        let subSubject = (item.substitution?.subject.isEmpty == false) ? item.substitution?.subject : nil
+                        let subRoom = (item.substitution?.room.isEmpty == false) ? item.substitution?.room : nil
+                        Text(subSubject ?? item.lesson.subject)
                             .font(.headline)
                         Spacer()
-                        let room = item.substitution?.room.isEmpty == false ? item.substitution!.room : item.lesson.room
+                        let room = subRoom ?? item.lesson.room
                         if !room.isEmpty {
                             Text("Sala \(room)")
                                 .font(.subheadline.weight(.semibold))
